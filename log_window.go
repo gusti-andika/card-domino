@@ -15,7 +15,6 @@ func NewLogWindow(game *Game) *LogWindow {
 		TextView: tview.NewTextView(),
 	}
 
-	log.SetBorder(true).SetTitle("Log")
 	return log
 }
 

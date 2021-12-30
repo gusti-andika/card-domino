@@ -134,6 +134,24 @@ func (p *Player) HasPlayableCards() bool {
 	return valid
 }
 
+func (p *Player) IsPlayableFor(card *Card) bool {
+
+	for _, c := range p.cards {
+		switch {
+		case card.Played:
+			continue
+		default:
+			if c.X == card.X || c.X == card.Y {
+				return true
+			} else if c.Y == card.X || c.Y == card.Y {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
 func (p *Player) RemainingCardValue() int {
 	total := 0
 

@@ -18,6 +18,7 @@ type Game struct {
 	last           *Card //last played card
 	headView       *tview.Flex
 	tailView       *tview.Flex
+	statusView     *tview.TextView
 	size           int
 	playedCardTail int
 	playedCardHead int
@@ -37,10 +38,6 @@ func NewGame() *Game {
 	}
 
 	game.log = NewLogWindow(game)
-	game.Players = make([]*Player, 3)
-	game.Players[0] = NewPlayer(game, "Player 1")
-	game.Players[1] = NewPlayer(game, "Player 2")
-	game.Players[2] = NewPlayer(game, "Player 3")
 
 	// setup UI & layout
 	header := tview.NewFlex()
@@ -50,22 +47,17 @@ func NewGame() *Game {
 	game.tailView.SetBorder(true).SetTitle("Tail[Last 3 Cards]")
 	game.AddItem(header, 0, 1, false)
 
-	game.AddItem(game.Players[0], 0, 1, true)
-	game.AddItem(game.Players[1], 0, 1, false)
-	game.AddItem(game.Players[2], 0, 1, false)
-	header.AddItem(game.log, 0, 1, false)
+	game.statusView = tview.NewTextView().SetDynamicColors(true)
+	game.statusView.SetBackgroundColor(tcell.ColorYellow)
+	logPanel := tview.NewFlex().SetDirection(tview.FlexRow)
+	logPanel.SetBorder(true).SetTitle("Log")
+	logPanel.AddItem(game.log, 0, 1, false)
+	logPanel.AddItem(game.statusView, 1, 1, false)
+	header.AddItem(logPanel, 0, 1, false)
 
 	// init deck and suffle cards
 	game.Deck = NewDeck(game)
 	game.Deck.Shuffle()
-
-	// assign card to players
-	game.Players[0].AssignCards(game.Deck.PopCards(5))
-	game.Players[1].AssignCards(game.Deck.PopCards(5))
-	game.Players[2].AssignCards(game.Deck.PopCards(5))
-
-	// set current player
-	game.currentPlayer = 0
 
 	game.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if game.currentPlayer < 0 || game.finish {
@@ -89,7 +81,65 @@ func NewGame() *Game {
 		return event
 	})
 
+	game.Log("Waiting for players...")
 	return game
+}
+
+func (g *Game) updateStatusView() {
+	if g.CurrentPlayer() == nil {
+		g.statusView.Clear()
+		return
+	}
+
+	g.statusView.SetText(fmt.Sprintf("[black::b][CURRENT_PLAYER:[%s]%s][black::b] [HEAD:%d] [TAIL:%d]", g.CurrentPlayer().color, g.CurrentPlayer().name, g.playedCardHead, g.playedCardTail))
+}
+
+func (g *Game) Join(playerName string) {
+	if len(g.Players) >= 3 {
+		g.Log(fmt.Sprintf("Can't join player: %s to game. Players already full ", playerName))
+		return
+	}
+
+	player := NewPlayer(g, playerName)
+	player.AssignCards(g.Deck.PopCards(5))
+	g.Players = append(g.Players, player)
+	g.Log(fmt.Sprintf("%s joined", playerName))
+
+	g.AddItem(player, 0, 1, false)
+
+	// players acquired, start game
+	if len(g.Players) == 3 {
+		g.start()
+	}
+}
+
+func (g *Game) start() {
+	g.currentPlayer = 0
+	g.App = tview.NewApplication()
+	g.App.SetFocus(g.CurrentPlayer())
+
+	var firstCard []*Card
+	for firstCard = g.Deck.PopCards(1); firstCard != nil; firstCard = g.Deck.PopCards(1) {
+		playable := 0
+
+		for _, p := range g.Players {
+			b := p.IsPlayableFor(firstCard[0])
+			fmt.Printf("[%s]Is playable: %v --> %t\n", p.name, *firstCard[0], b)
+			if b {
+				playable++
+			}
+
+		}
+
+		if playable == len(g.Players) {
+			g.playCard(firstCard[0])
+			g.Log(fmt.Sprintf("Game Initiated with card [%d,%d]", firstCard[0].X, firstCard[0].Y))
+			return
+		}
+	}
+
+	g.finish = true
+	g.Log("Can not start game. Could not initiate playable card")
 }
 
 func (g *Game) playCard(card *Card) bool {
@@ -157,8 +207,6 @@ func (g *Game) playCard(card *Card) bool {
 	g.last = card
 	g.last.Highlight()
 
-	g.Log(fmt.Sprintf("head:%d tail: %d", g.playedCardHead, g.playedCardTail))
-
 	return g.isFinish()
 }
 
@@ -187,16 +235,14 @@ func (g *Game) validCard(card *Card) bool {
 }
 
 func (g *Game) Run() {
-	g.App = tview.NewApplication()
-
 	g.log.SetDynamicColors(true)
-	if err := g.App.SetRoot(g, true).SetFocus(g.CurrentPlayer()).Run(); err != nil {
+	if err := g.App.SetRoot(g, true).Run(); err != nil {
 		panic(err)
 	}
 }
 
 func (g *Game) Log(s string) {
-	s = fmt.Sprintf("[violet][sys[]:%s\n[white]", s)
+	s = fmt.Sprintf("[violet::r][sys[]:%s\n[white::-]", s)
 	g.log.Write([]byte(s))
 }
 
@@ -233,7 +279,7 @@ func (g *Game) update() {
 		if g.SelectedCard().Played {
 			g.CurrentPlayer().Log(fmt.Sprintf("Card already played. Please select another "))
 		} else {
-			g.CurrentPlayer().Log(fmt.Sprintf("Card [%d - %d] not playable. Please select another ", g.SelectedCard().X, g.SelectedCard().Y))
+			g.CurrentPlayer().Log(fmt.Sprintf("Card [%d,%d] not playable. Please select another ", g.SelectedCard().X, g.SelectedCard().Y))
 		}
 
 		return
@@ -246,6 +292,8 @@ func (g *Game) update() {
 	} else {
 		g.nextPlayer()
 	}
+
+	g.updateStatusView()
 }
 
 func (g *Game) nextPlayer() {
