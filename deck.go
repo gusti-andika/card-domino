@@ -4,11 +4,13 @@ import (
 	"fmt"
 	"math/rand"
 	"time"
+
+	"github.com/gusti-andika/domino/ui"
 )
 
 type Deck struct {
 	offset int
-	cards  [21]*Card
+	cards  [21]*ui.Card
 	last   int
 	game   *Game
 }
@@ -21,7 +23,7 @@ func (d *Deck) Shuffle() {
 	index := 0
 	for i := 1; i <= 6; i++ {
 		for j := i; j <= 6; j++ {
-			card := NewCard(i, j)
+			card := ui.NewCard(i, j)
 			card.SetBorder(true).
 				SetTitle(fmt.Sprintf("[%d,%d]", i, j)).
 				SetRect(0, 0, 10, 10)
@@ -48,7 +50,7 @@ func (d *Deck) PrintLastCards(num int) {
 }
 
 // pop n cards from deck
-func (d *Deck) PopCards(num int) []*Card {
+func (d *Deck) PopCards(num int) []*ui.Card {
 	if d.last-num < 0 {
 		return nil
 	}
@@ -57,7 +59,7 @@ func (d *Deck) PopCards(num int) []*Card {
 	end := start + num
 	d.last = d.last - num
 
-	newcards := make([]*Card, 0, num)
+	newcards := make([]*ui.Card, 0, num)
 	newcards = append(newcards, d.cards[start:end]...)
 	return newcards
 }

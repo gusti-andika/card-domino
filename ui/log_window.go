@@ -1,6 +1,8 @@
-package domino
+package ui
 
-import "github.com/rivo/tview"
+import (
+	"github.com/rivo/tview"
+)
 
 type LogWindow struct {
 	*tview.TextView
@@ -10,7 +12,7 @@ type Log interface {
 	Log(s string)
 }
 
-func NewLogWindow(game *Game) *LogWindow {
+func NewLogWindow() *LogWindow {
 	log := &LogWindow{
 		TextView: tview.NewTextView(),
 	}

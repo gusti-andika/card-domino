@@ -1,0 +1,68 @@
+syntax="proto3";
+
+//import "google/protobuf/empty.proto";
+
+package domino;
+option go_package="./rpc";
+
+message GameUpdate {
+    string cmd = 1;
+    oneof instrument {
+        Player player = 2;
+        Move move = 3;
+        string log = 4;
+        GetCards getCards = 5;
+    }
+}
+
+/*
+message GameUpdateResult {
+    string cmd = 1;
+    oneof instrument {
+        Player player = 2;
+        Move move = 3;
+        string log = 4;
+        GetCards getCards = 5;
+    }
+} */
+
+message JoinRequest {
+    string playerName = 1;
+}
+
+message JoinResponse {
+    Player player = 1; // joined response for your player information
+    repeated Player playersInGame = 2; // player alraedy joined before you
+}
+
+message Card {
+    int32 x = 1;
+    int32 y = 2;
+}
+
+message GetCards {
+    Player player = 1;
+    repeated Card cards = 2;
+}
+
+message Player {
+    string id=1;
+    string name=2;
+    string color=3;
+    repeated Card cards = 4;
+}
+
+
+message Move {
+    Player player = 1;
+    Card card = 2;
+    int32 cardIndex =3;
+    Player nextPlayer = 4;
+}
+
+service GameService{
+    // join game request
+    rpc Join(JoinRequest) returns (JoinResponse) {};
+    // send/receive update about game states
+    rpc Update(stream GameUpdate) returns (stream GameUpdate) {};
+}

@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/gusti-andika/domino/ui"
 )
 
 func TestShuffleAndPopCards(t *testing.T) {
@@ -23,7 +24,7 @@ func TestShuffleAndPopCards(t *testing.T) {
 		t.Errorf("After popped last 5 cards expecting to have 16 cards in deck but got %d cards", d.GetNum())
 	}
 
-	comparer := cmp.Comparer(func(a, b *Card) bool {
+	comparer := cmp.Comparer(func(a, b *ui.Card) bool {
 		return a.X == b.X && a.Y == b.Y
 	})
 	if diff := cmp.Diff(expectedLast5cards, last5cards, comparer); diff != "" {
