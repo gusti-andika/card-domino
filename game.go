@@ -2,6 +2,7 @@ package domino
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -59,29 +60,28 @@ func NewGame() *Game {
 	game.Deck = NewDeck(game)
 	game.Deck.Shuffle()
 
+	game.Log("Waiting for players...")
 	game.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		if game.currentPlayer < 0 || game.finish {
+		if game.CurrentPlayer() == nil || game.finish {
 			return event
 		}
 
-		els := make([]interface{}, len(game.Players[game.currentPlayer].cards))
-		for i := range game.Players[game.currentPlayer].cards {
-			els[i] = game.Players[game.currentPlayer].cards[i]
+		player := game.CurrentPlayer()
+		if player.isCpu {
+			return event
 		}
 
 		switch event.Key() {
 		case tcell.KeyRight:
-			selectCard(game, els, false)
+			player.selectCard(false)
 		case tcell.KeyLeft:
-			selectCard(game, els, true)
+			player.selectCard(true)
 		case tcell.KeyEnter:
 			game.update()
 		}
 
 		return event
 	})
-
-	game.Log("Waiting for players...")
 	return game
 }
 
@@ -94,13 +94,48 @@ func (g *Game) updateStatusView() {
 	g.statusView.SetText(fmt.Sprintf("[black::b][CURRENT_PLAYER:[%s]%s][black::b] [HEAD:%d] [TAIL:%d]", g.CurrentPlayer().color, g.CurrentPlayer().name, g.playedCardHead, g.playedCardTail))
 }
 
-func (g *Game) Join(playerName string) {
+func (g *Game) Join(playerName string, isCpu bool) {
 	if len(g.Players) >= 3 {
 		g.Log(fmt.Sprintf("Can't join player: %s to game. Players already full ", playerName))
 		return
 	}
 
-	player := NewPlayer(g, playerName)
+	player := NewPlayer(g, playerName, isCpu)
+	player.isCpu = isCpu
+	if player.isCpu {
+		player.SetFocusFunc(func() {
+			if !player.HasPlayableCards() {
+				return
+			}
+
+			go func() {
+				ch := make(chan struct{})
+				for {
+					select {
+					case <-ch:
+						goto finish
+					default:
+						g.App.QueueUpdateDraw(func() {
+
+							selected := player.selectCard(false)
+							time.Sleep(1000 * time.Millisecond)
+							if g.validCard(selected) {
+								g.update()
+								close(ch)
+							}
+						})
+					}
+				finish:
+				}
+			}()
+
+		})
+
+		player.SetBlurFunc(func() {
+			time.Sleep(1 * time.Second)
+		})
+	}
+
 	player.AssignCards(g.Deck.PopCards(5))
 	g.Players = append(g.Players, player)
 	g.Log(fmt.Sprintf("%s joined", playerName))
@@ -114,17 +149,13 @@ func (g *Game) Join(playerName string) {
 }
 
 func (g *Game) start() {
-	g.currentPlayer = 0
 	g.App = tview.NewApplication()
-	g.App.SetFocus(g.CurrentPlayer())
-
 	var firstCard []*Card
 	for firstCard = g.Deck.PopCards(1); firstCard != nil; firstCard = g.Deck.PopCards(1) {
 		playable := 0
 
 		for _, p := range g.Players {
 			b := p.IsPlayableFor(firstCard[0])
-			fmt.Printf("[%s]Is playable: %v --> %t\n", p.name, *firstCard[0], b)
 			if b {
 				playable++
 			}
@@ -133,7 +164,9 @@ func (g *Game) start() {
 
 		if playable == len(g.Players) {
 			g.playCard(firstCard[0])
+			g.nextPlayer()
 			g.Log(fmt.Sprintf("Game Initiated with card [%d,%d]", firstCard[0].X, firstCard[0].Y))
+			g.updateStatusView()
 			return
 		}
 	}
@@ -264,20 +297,20 @@ func (g *Game) SelectedCard() *Card {
 
 func (g *Game) update() {
 	// check game is started when there's player playing
-	if g.CurrentPlayer() == nil {
-		return
-	}
+	// if g.CurrentPlayer() == nil {
+	// 	return
+	// }
 
-	if g.CurrentPlayer().HasPlayableCards() == false {
-		g.Log(fmt.Sprintf("%s not have playable card. Skipping turn...", g.CurrentPlayer().id))
-		g.nextPlayer()
-		return
-	}
+	// if !g.CurrentPlayer().HasPlayableCards() {
+	// 	g.Log(fmt.Sprintf("%s not have playable card. Skipping turn...", g.CurrentPlayer().id))
+	// 	g.nextPlayer()
+	// 	return
+	// }
 
 	// check selected card is valid card
-	if g.validCard(g.SelectedCard()) == false {
+	if !g.validCard(g.SelectedCard()) {
 		if g.SelectedCard().Played {
-			g.CurrentPlayer().Log(fmt.Sprintf("Card already played. Please select another "))
+			g.CurrentPlayer().Log(fmt.Sprintf("Card [%d,%d] already played. Please select another ", g.SelectedCard().X, g.SelectedCard().Y))
 		} else {
 			g.CurrentPlayer().Log(fmt.Sprintf("Card [%d,%d] not playable. Please select another ", g.SelectedCard().X, g.SelectedCard().Y))
 		}
@@ -297,9 +330,11 @@ func (g *Game) update() {
 }
 
 func (g *Game) nextPlayer() {
+	if g.CurrentPlayer() != nil {
+		g.CurrentPlayer().selectedCard = -1
+		g.CurrentPlayer().SetBorderColor(tcell.ColorWhite)
+	}
 
-	g.CurrentPlayer().selectedCard = -1
-	g.CurrentPlayer().SetBorderColor(tcell.ColorWhite)
 	g.currentPlayer++
 	if g.currentPlayer >= len(g.Players) {
 		g.currentPlayer = 0
@@ -353,35 +388,4 @@ func (g *Game) end() {
 	g.finish = true
 	g.Log(fmt.Sprintf("[::bl]GAME FINISHED. Winner is [%s]%s", winner.color, winner.name))
 
-}
-
-func selectCard(g *Game, elements []interface{}, reverse bool) {
-	var focusIdx int = 0
-	for i, el2 := range elements {
-		var card *Card = nil
-		switch el2.(type) {
-		case *Card:
-			card = el2.(*Card)
-		}
-		if card != nil && !card.HasFocus() {
-			continue
-		}
-		if reverse {
-			i = i - 1
-			if i < 0 {
-				i = len(elements) - 1
-			}
-		} else {
-			i = i + 1
-			i = i % len(elements)
-		}
-
-		focusIdx = i
-	}
-
-	if focusIdx < len(elements) {
-		el3 := elements[focusIdx].(tview.Primitive)
-		g.App.SetFocus(el3)
-		g.CurrentPlayer().selectedCard = focusIdx
-	}
 }

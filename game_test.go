@@ -8,8 +8,8 @@ import (
 
 func TestGameInit(t *testing.T) {
 	game := NewGame()
-	game.Join("player1")
-	game.Join("player2")
+	game.Join("player1", false)
+	game.Join("player2", false)
 	comparer := cmp.Comparer(func(a, b *Card) bool {
 		return a.X == b.X && a.Y == b.Y
 	})

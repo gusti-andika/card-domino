@@ -9,7 +9,7 @@ import (
 	"github.com/rivo/tview"
 )
 
-var idCounter = 0
+var idCounter, cpuCounter = 0, 0
 var lastColor = -1
 var colors = [...]string{
 	"maroon",
@@ -53,14 +53,16 @@ type Player struct {
 	name          string
 	id            string
 	remainingCard int
+	isCpu         bool
 }
 
-func NewPlayer(game *Game, name string) *Player {
+func NewPlayer(game *Game, name string, isCpu bool) *Player {
 	player := &Player{
 		Flex:         tview.NewFlex(),
 		game:         game,
 		selectedCard: 0,
 		name:         name,
+		isCpu:        isCpu,
 	}
 
 	if lastColor == -1 {
@@ -74,17 +76,30 @@ func NewPlayer(game *Game, name string) *Player {
 	}
 	player.color = colors[lastColor]
 	player.SetTitleColor(tcell.ColorNames[colors[lastColor]])
-	idCounter++
-	player.id = fmt.Sprintf("P%d", idCounter)
+
+	if !isCpu {
+		idCounter++
+		player.id = fmt.Sprintf("P%d", idCounter)
+
+	} else {
+		cpuCounter++
+		player.id = fmt.Sprintf("CPU-%d", cpuCounter)
+
+	}
 
 	player.SetBorder(true).SetTitle(fmt.Sprintf("%s[%s]", player.name, player.id))
-
 	return player
 }
 
 func (p *Player) AssignCards(cards []*Card) {
 	p.cards = cards
 	p.remainingCard = len(cards)
+	if p.isCpu {
+		for _, c := range p.cards {
+			c.hideNotPlayedCard = true
+			c.SetTitle("[?,?]")
+		}
+	}
 	p.refresh()
 }
 
@@ -118,6 +133,20 @@ func (p *Player) Log(s string) {
 	p.game.log.Write([]byte(s2))
 }
 
+func (p *Player) GetFirstPlayableCard() (int, *Card) {
+	for i, c := range p.cards {
+		if c.Played {
+			continue
+		}
+
+		if p.game.validCard(c) {
+			return i, c
+		}
+	}
+
+	return -1, nil
+}
+
 func (p *Player) HasPlayableCards() bool {
 	valid := false
 	for _, c := range p.cards {
@@ -125,7 +154,7 @@ func (p *Player) HasPlayableCards() bool {
 			continue
 		}
 
-		if p.game.validCard(c) == true {
+		if p.game.validCard(c) {
 			valid = true
 			break
 		}
@@ -167,4 +196,32 @@ func (p *Player) RemainingCardValue() int {
 
 func (p *Player) RemainingCardCount() int {
 	return p.remainingCard
+}
+
+func (p *Player) selectCard(reverse bool) *Card {
+	var focusIdx int = 0
+	for i, card := range p.cards {
+
+		if !card.HasFocus() {
+			continue
+		}
+		if reverse {
+			i = i - 1
+			if i < 0 {
+				i = len(p.cards) - 1
+			}
+		} else {
+			i = i + 1
+			i = i % len(p.cards)
+		}
+
+		focusIdx = i
+	}
+
+	//if focusIdx < len(p.cards) {
+	p.game.App.SetFocus(p.cards[focusIdx])
+	p.selectedCard = focusIdx
+	//}
+
+	return p.cards[focusIdx]
 }
