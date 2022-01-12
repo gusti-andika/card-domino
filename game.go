@@ -32,7 +32,7 @@ func NewGame(mode GameMode) *Game {
 	game := &Game{
 		currentPlayer: -1,
 		//mode:          mode,
-		ui:            ui.NewGameUI(),
+		ui: ui.NewGameUI(),
 	}
 
 	// init deck and suffle cards
@@ -59,7 +59,7 @@ func (g *Game) updateStatusView() {
 
 func (g *Game) Join(player *Player) bool {
 	g.Log(fmt.Sprintf("%s joined", player.Name))
-	
+
 	if len(g.Players) >= 3 {
 		g.Log(fmt.Sprintf("Can't join player: %s to game. Players already full ", player.Name))
 		return false
@@ -94,6 +94,9 @@ func (g *Game) start() {
 
 			eventData := map[string]interface{}{"card": firstCard[0]}
 			eventbus.Post(eventbus.Event{eventbus.InitialCard, eventData})
+
+			g.nextPlayer()
+
 			return
 		}
 	}
@@ -117,14 +120,13 @@ func (g *Game) playCard() (isFinish bool, playedCard *ui.Card, isAppend bool) {
 func (g *Game) Run() {
 	InitGameEventHandlers(g)
 	g.Log("Waiting for players...")
-	
+
 	go StartServer(g)
 
-	func() {
-		if err := g.App.SetRoot(g.ui, true).Run(); err != nil {
-			panic(err)
-		}
-	}()
+	if err := g.App.SetRoot(g.ui, true).Run(); err != nil {
+		panic(err)
+	}
+
 }
 
 func (g *Game) GetPlayerById(id string) *Player {
@@ -141,21 +143,21 @@ func (g *Game) Log(s string) {
 	s = fmt.Sprintf("[violet::r][sys[]:%s\n[white::-]", s)
 	//data := map[string]interface{}{"msg": s}
 	//eventbus.Post(eventbus.Event{eventbus.GameLog, data})
-	 g.ui.Log(s)
-	 //fmt.Print(s)
+	g.ui.Log(s)
+	//fmt.Print(s)
 	// g.sendLog(s)
 }
 
 func (g *Game) sendLog(s string) {
-	if g.sendLogFunc == nil {
-		return
-	}
+	// if g.sendLogFunc == nil {
+	// 	return
+	// }
 
-	for _, p := range g.Players {
-		if p.ClientChannel != nil {
-			g.sendLogFunc(p.ClientChannel, s)
-		}
-	}
+	// for _, p := range g.Players {
+	// 	if p.ClientChannel != nil {
+	// 		g.sendLogFunc(p.ClientChannel, s)
+	// 	}
+	// }
 }
 
 func (g *Game) CurrentPlayer() *Player {
@@ -189,37 +191,45 @@ func (g *Game) update() {
 	// 	return
 	// }
 
-	// check selected card is valid card
-	// if !g.validCard(g.SelectedCard()) {
-	// 	var msg string
-	// 	if g.SelectedCard().Played {
-	// 		msg = "Card already played. Please select another "
-	// 		g.CurrentPlayer().Log(msg)
-	// 	} else {
-	// 		msg = fmt.Sprintf("Card [%d,%d] not playable. Please select another ", g.SelectedCard().X, g.SelectedCard().Y)
-	// 		g.CurrentPlayer().Log(msg)
-	// 	}
-
-	// 	eventData := map[string]interface{}{"currentPlayer": g.CurrentPlayer(), "msg": msg}
-	// 	eventbus.Post(eventbus.Event{eventbus.InvalidMove, eventData})
-	// 	return
-	// }
-
-	// play current player selected card
-	isGameFinish, playedCard, _ := g.playCard()
 	// get current player
 	currentPlayer := g.CurrentPlayer()
+	selectedCardIndex := currentPlayer.GetSelectedCardIndex()
+
+	//check selected card is valid card
+	if !g.ui.ValidCard(g.SelectedCard()) {
+		var msg string
+		if g.SelectedCard().Played {
+			msg = "Card already played. Please select another "
+			g.CurrentPlayer().Log(msg)
+		} else {
+			msg = fmt.Sprintf("Card [%d,%d] not playable. Please select another ", g.SelectedCard().X, g.SelectedCard().Y)
+			g.CurrentPlayer().Log(msg)
+		}
+
+		eventData := map[string]interface{}{
+			"currentplayer": g.CurrentPlayer(),
+			"cardindex":     selectedCardIndex,
+			"msg":           msg}
+		eventbus.Post(eventbus.Event{eventbus.InvalidMove, eventData})
+		return
+	}
+
+	// play current player selected card
+	_, playedCard, _ := g.playCard()
 	// move to next player
 	nextPlayer := g.nextPlayer()
 
 	// notify player moved event
-	eventData := map[string]interface{}{"currentPlayer": currentPlayer, "card": playedCard, "nextPlayer": nextPlayer}
+	eventData := map[string]interface{}{"currentplayer": currentPlayer, "card": playedCard,
+		"nextplayer": nextPlayer, "cardindex": selectedCardIndex}
+	g.Log(fmt.Sprintf("%+v", eventData))
 	eventbus.Post(eventbus.Event{eventbus.PlayerMoved, eventData})
 
-	if isGameFinish {
-		eventData := map[string]interface{}{"winner": g.end()}
-		eventbus.Post(eventbus.Event{eventbus.GameFinished, eventData})
-	}
+	//TODO: fix this
+	// if isGameFinish {
+	// 	eventData := map[string]interface{}{"winner": g.end()}
+	// 	eventbus.Post(eventbus.Event{eventbus.GameFinished, eventData})
+	// }
 
 	g.updateStatusView()
 }
@@ -244,6 +254,9 @@ func (g *Game) nextPlayer() *Player {
 
 		return g.nextPlayer()
 	}
+
+	eventData := map[string]interface{}{"player": g.CurrentPlayer()}
+	eventbus.Post(eventbus.Event{eventbus.PlayerTurn, eventData})
 
 	return g.CurrentPlayer()
 }

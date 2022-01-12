@@ -44,6 +44,16 @@ func (ui *PlayerUI) GetCard(index int) *Card {
 	return ui.cards[index]
 }
 
+func (ui *PlayerUI) PlayCard(index int) *Card {
+	if index >= len(ui.cards) {
+		return nil
+	}
+
+	card := ui.cards[index]
+	card.Play()
+	return card
+}
+
 func (ui *PlayerUI) PrintCards() {
 	for _, c := range ui.cards {
 		fmt.Printf("%v\n", c)

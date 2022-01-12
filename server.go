@@ -64,7 +64,7 @@ func (s *Server) Join(_ context.Context, req *rpc.JoinRequest) (res *rpc.JoinRes
 }
 
 func (s *Server) Update(stream rpc.GameService_UpdateServer) error {
-	s.game.Log(fmt.Sprintf("received update: %+v", stream))
+	//s.game.Log(fmt.Sprintf("received update: %+v", stream))
 	var player *Player
 	for {
 		// req := rpc.GameChannel{}
@@ -83,24 +83,23 @@ func (s *Server) Update(stream rpc.GameService_UpdateServer) error {
 		case "getcards":
 
 			player, _ = s.handlePlayerGetCards(stream, req)
-			s.game.Log(fmt.Sprintf("call handlePlayerGetCards: %+v", player))
+			//s.game.Log(fmt.Sprintf("call handlePlayerGetCards: %+v", player))
 
-		case "move":
+		case "playermove":
 			s.handlePlayerMove(stream, req)
 		}
 
 		if player != nil {
-			s.game.Log("call go func")
 
 			go func() {
 				for {
 					select {
 					case msg := <-player.out:
-						s.game.Log(fmt.Sprintf("msg to send: %+v", msg))
+						s.game.Log(fmt.Sprintf("[%s]msg to send: %+v", player.Id, msg))
 						stream.SendMsg(msg)
 					default:
-						s.game.Log(fmt.Sprintf("%v no msg to deliver", player.Id))
-						time.Sleep(5 * time.Second)
+						//s.game.Log(fmt.Sprintf("%v no msg to deliver", player.Id))
+						time.Sleep(500 * time.Millisecond)
 					}
 				}
 			}()

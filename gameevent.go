@@ -6,6 +6,7 @@ import (
 
 	"github.com/gusti-andika/domino/eventbus"
 	"github.com/gusti-andika/domino/rpc"
+	"github.com/gusti-andika/domino/ui"
 )
 
 type gameEvent struct {
@@ -23,6 +24,7 @@ func (ge *gameEvent) initHandlers() {
 	eventbus.AddHandler(eventbus.InitialCard, ge.notifyInitialCard)
 	eventbus.AddHandler(eventbus.InvalidMove, ge.notifyInvalidMove)
 	eventbus.AddHandler(eventbus.SkipTurn, ge.notifySkipTurn)
+	eventbus.AddHandler(eventbus.PlayerTurn, ge.notifyPlayerTurn)
 	eventbus.AddHandler(eventbus.PlayerMoved, ge.notifyPlayerMove)
 	eventbus.AddHandler(eventbus.CardAssigned, ge.notifyCardAssigned)
 	eventbus.AddHandler(eventbus.GameFinished, ge.notifyGameFinished)
@@ -58,7 +60,25 @@ func (ge *gameEvent) notifyNewPlayer(event eventbus.Event) {
 }
 
 func (ge *gameEvent) notifyPlayerMove(event eventbus.Event) {
+	current := event.Data["currentplayer"].(*Player)
+	next := event.Data["nextplayer"].(*Player)
+	card := event.Data["card"].(*ui.Card)
+	for _, p := range ge.game.Players {
+		msg := &rpc.GameUpdate{
+			Cmd: "playermove",
+			Instrument: &rpc.GameUpdate_Move{
+				Move: &rpc.Move{
+					Player:     &rpc.Player{Id: current.Id},
+					NextPlayer: &rpc.Player{Id: next.Id},
+					Card:       &rpc.Card{X: int32(card.X), Y: int32(card.Y)},
+				},
+			},
+		}
 
+		p.out <- msg
+
+		//ge.game.Log(fmt.Sprintf("send move to player : %+v", p))
+	}
 }
 
 func (ge *gameEvent) notifyCardAssigned(event eventbus.Event) {
@@ -85,8 +105,11 @@ func (ge *gameEvent) notifyCardAssigned(event eventbus.Event) {
 		player.out <- msg
 	}
 
+	ge.game.Log(fmt.Sprintf("num player : %d", len(ge.game.Players)))
 	if len(ge.game.Players) >= 2 {
-		ge.game.start()
+		ge.game.App.QueueUpdateDraw(func() {
+			ge.game.start()
+		})
 	}
 }
 
@@ -95,7 +118,19 @@ func (ge *gameEvent) notifyGameFinished(event eventbus.Event) {
 }
 
 func (ge *gameEvent) notifyInitialCard(event eventbus.Event) {
+	for _, p := range ge.game.Players {
+		initialCard := event.Data["card"].(*ui.Card)
+		msg := &rpc.GameUpdate{
+			Cmd: "initialcard",
+			Instrument: &rpc.GameUpdate_InitialCard{
+				InitialCard: &rpc.Card{
+					X: int32(initialCard.X), Y: int32(initialCard.Y),
+				},
+			},
+		}
 
+		p.out <- msg
+	}
 }
 
 func (ge *gameEvent) notifyInvalidMove(event eventbus.Event) {
@@ -103,6 +138,21 @@ func (ge *gameEvent) notifyInvalidMove(event eventbus.Event) {
 }
 
 func (ge *gameEvent) notifySkipTurn(event eventbus.Event) {
+
+}
+
+func (ge *gameEvent) notifyPlayerTurn(event eventbus.Event) {
+	player := event.Data["player"].(*Player)
+	for _, p := range ge.game.Players {
+		p.out <- &rpc.GameUpdate{
+			Cmd: "playerturn",
+			Instrument: &rpc.GameUpdate_Player{
+				Player: &rpc.Player{
+					Id: player.Id,
+				},
+			},
+		}
+	}
 
 }
 
@@ -118,13 +168,13 @@ func (ge *gameEvent) notifyGameLog(event eventbus.Event) {
 		ge.game.ui.Log(msg)
 	})
 
-	for _, p := range ge.game.Players {
-		if p.ClientChannel != nil {
-			p.ClientChannel.Send(&rpc.GameUpdate{
-				Cmd:        "log",
-				Instrument: &rpc.GameUpdate_Log{Log: msg},
-			})
-		}
-	}
+	// for _, p := range ge.game.Players {
+	// 	if p.ClientChannel != nil {
+	// 		p.ClientChannel.Send(&rpc.GameUpdate{
+	// 			Cmd:        "log",
+	// 			Instrument: &rpc.GameUpdate_Log{Log: msg},
+	// 		})
+	// 	}
+	// }
 
 }

@@ -7,7 +7,6 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/gusti-andika/domino/eventbus"
-	"github.com/gusti-andika/domino/rpc"
 	"github.com/gusti-andika/domino/ui"
 )
 
@@ -47,7 +46,7 @@ var colors = [...]string{
 }
 
 type Player struct {
-	ClientChannel rpc.GameService_UpdateServer
+	//ClientChannel rpc.GameService_UpdateServer
 	Name          string
 	Id            string
 	ui            *ui.PlayerUI
@@ -60,21 +59,27 @@ type Player struct {
 	isMe          bool
 }
 
-func NewOpponent(name string, id string, color string) *Player {
+func NewClientOpponent(name string, id string, color string) *Player {
 	opponent := NewPlayer(name)
 	opponent.isMe = false
 	opponent.color = color
 	opponent.ui.SetTitleColor(tcell.ColorNames[color])
-	opponent.Id = fmt.Sprintf("P%d", idCounter)
+	opponent.Id = id
 	opponent.ui.SetBorder(true).SetTitle(fmt.Sprintf("%s[%s]", opponent.Name, opponent.Id))
 
 	return opponent
 }
 
+func NewClientPlayer(name string) *Player {
+	player := NewPlayer(name)
+	player.ui.SetTitle(fmt.Sprintf("%s[%s]", player.Name, player.Id))
+	return player
+}
+
 func NewPlayer(name string) *Player {
 	player := &Player{
 		ui:           ui.NewPlayerUI(),
-		selectedCard: 0,
+		selectedCard: -1,
 		Name:         name,
 		out:          make(chan interface{}, 10),
 		isMe:         true,
@@ -93,7 +98,7 @@ func NewPlayer(name string) *Player {
 	player.ui.SetTitleColor(tcell.ColorNames[colors[lastColor]])
 	idCounter++
 	player.Id = fmt.Sprintf("P%d", idCounter)
-	player.ui.SetBorder(true).SetTitle(fmt.Sprintf("%s[%s]", player.Name, player.Id))
+	player.ui.SetBorder(true).SetTitle(fmt.Sprintf("You [%s]", player.Id))
 
 	// player.ui.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 	// 	if !player.allowInput {
@@ -115,6 +120,22 @@ func NewPlayer(name string) *Player {
 	return player
 }
 
+func (p *Player) SetId(id string) {
+	p.Id = id
+	name := p.Name
+	if p.isMe {
+		name = "You"
+	}
+	p.ui.SetTitle(fmt.Sprintf("%s [%s]", name, p.Id))
+
+}
+
+func (p *Player) SetColor(color string) {
+	p.color = color
+	p.ui.SetTitleColor(tcell.ColorNames[p.color])
+
+}
+
 func (p *Player) AllowInput(allowInput bool) {
 	p.allowInput = allowInput
 }
@@ -133,12 +154,19 @@ func (p *Player) SelectCard(card int) bool {
 	}
 
 	p.selectedCard = card
-	p.game.App.SetFocus(p.GetSelectedCard())
 	return true
 }
 
 func (p *Player) PrintCard() {
 	p.ui.PrintCards()
+}
+
+func (p *Player) GetUI() *ui.PlayerUI {
+	return p.ui
+}
+
+func (p *Player) GetSelectedCardIndex() int {
+	return p.selectedCard
 }
 
 func (p *Player) GetSelectedCard() *ui.Card {
@@ -154,25 +182,11 @@ func (p *Player) PlayCard() *ui.Card {
 	if selectedCard == nil {
 		return nil
 	}
-	// check selected card is valid card
-	if !p.game.ui.ValidCard(selectedCard) {
-		var msg string
-		if selectedCard.Played {
-			msg = "Card already played. Please select another "
-			p.Log(msg)
-		} else {
-			msg = fmt.Sprintf("Card [%d,%d] not playable. Please select another ", selectedCard.X, selectedCard.Y)
-			p.Log(msg)
-		}
-
-		eventData := map[string]interface{}{"currentPlayer": p, "msg": msg}
-		eventbus.Post(eventbus.Event{eventbus.InvalidMove, eventData})
-		return nil
-	}
 
 	selectedCard.Play()
 	p.remainingCard--
 	p.Log(fmt.Sprintf("Played card [%d,%d]", selectedCard.X, selectedCard.Y))
+
 	return selectedCard
 }
 
@@ -246,7 +260,11 @@ func (p *Player) SetCurrentPlayer(current bool) {
 	}
 }
 
-func (p *Player) selectCard(reverse bool) {
+func (p *Player) GetCardNum() int {
+	return p.ui.GetCardNum()
+}
+
+func (p *Player) navigateCard(reverse bool) {
 	var focusIdx int = 0
 	for i := 0; i < p.ui.GetCardNum(); i++ {
 		card := p.ui.GetCard(i)
@@ -268,4 +286,22 @@ func (p *Player) selectCard(reverse bool) {
 	}
 
 	p.SelectCard(focusIdx)
+}
+
+func (p *Player) navigateRight() {
+	if p.selectedCard >= p.ui.GetCardNum()-1 {
+		return
+	}
+	//	var focusIdx int = 0
+	p.selectedCard++
+
+	//p.SelectCard(focusIdx)
+}
+
+func (p *Player) navigateLeft() {
+	if p.selectedCard <= 0 {
+		return
+	}
+	p.selectedCard--
+
 }

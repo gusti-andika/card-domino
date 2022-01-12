@@ -12,6 +12,7 @@ message GameUpdate {
         Move move = 3;
         string log = 4;
         GetCards getCards = 5;
+        Card initialCard = 6;
     }
 }
 

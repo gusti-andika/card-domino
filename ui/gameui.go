@@ -124,16 +124,6 @@ func (ui *GameUI) AddPlayerUI(pui *PlayerUI) {
 	}
 }
 
-func (ui *GameUI) GetPlayerUI(id string) *PlayerUI {
-	for i := 0; i < ui.GetItemCount(); i++ {
-		if pui, ok := ui.GetItem(i).(*PlayerUI); ok && pui.ID == id {
-			return pui
-		}
-	}
-
-	return nil
-}
-
 func (ui *GameUI) AddLast(card *Card) {
 	if ui.head == nil {
 		ui.head, ui.tail = card, card

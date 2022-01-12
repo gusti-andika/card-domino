@@ -17,6 +17,7 @@ const (
 	PlayerMoved
 	GameFinished
 	GameLog
+	PlayerTurn
 )
 
 type Event struct {
@@ -64,17 +65,13 @@ func write(s string) {
 }
 
 func Post(event Event) {
-	write(fmt.Sprintf("--->Post: %v", event))
+	//TODO: move console log to middleware
+	//write(fmt.Sprintf("--->Post: %v", event))
 	if !started {
 		return
 	}
-	//if bus != nil {
-	//go func() {
-	//	write(fmt.Sprintf("(2)Received Event: %v", event))
 	bus.ch <- event
-	//}
-	//}
-	write(fmt.Sprintf("<---Post: %v", event))
+	//write(fmt.Sprintf("<---Post: %v", event))
 
 }
 
@@ -83,7 +80,5 @@ func Close() {
 }
 
 func AddHandler(t EventType, handler func(Event)) {
-	//if bus != nil {
 	bus.handler[t] = handler
-	//}
 }
